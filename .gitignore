@@ -1,0 +1,5 @@
+*.pdparams
+__pycache__
+*.pyc
+.idea
+.iml
