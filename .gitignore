@@ -1,5 +1,10 @@
-*.pdparams
 __pycache__
 *.pyc
 .idea
 .iml
+*.log
+*.
+*.tar.gz
+/log
+*.pdparams
+*.pdopt

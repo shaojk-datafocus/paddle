@@ -6,6 +6,7 @@ import paddle.nn.functional as F
 
 import numpy as np
 from tqdm import tqdm
+from model import MNIST
 
 # 指定加载图片的库，确保加载的数据是ndarray类型
 paddle.vision.set_image_backend('cv2')
@@ -13,15 +14,6 @@ train_dataset = paddle.vision.datasets.MNIST(mode='train')
 
 train_data = np.array(train_dataset[0][0])
 train_label = np.array(train_dataset[0][1])
-
-class MNIST(Layer):
-    def __init__(self) -> None:
-        super().__init__()
-        self.fc = Linear(in_features=784, out_features=1)
-    
-    def forward(self, inputs):
-        outputs = self.fc(inputs)
-        return outputs
 
 model = MNIST()
 
