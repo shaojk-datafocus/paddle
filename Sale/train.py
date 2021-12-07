@@ -1,4 +1,6 @@
+from math import perm
 import paddle
+from paddle.fluid.layers.nn import pad
 from paddle.nn import functional as F
 from paddle.io import DataLoader
 from easydict import EasyDict
@@ -14,6 +16,16 @@ def train(model, dataloader, config, logger=None):
 
   # 指定优化策略，更新模型参数
   optimizer = paddle.optimizer.Adam(learning_rate=config.LEARNING_RATE, beta1=0.9, beta2=0.999, parameters=model.parameters()) 
+  # 加载模型权重
+  if os.path.exists("logs/{}.pdparams".format(config.MODEL_NAME)):
+      param_dict = paddle.load("logs/{}.pdparams".format(config.MODEL_NAME))
+      model.load_dict(param_dict)
+      print("加载已保存模型权重","logs/{}.pdparams".format(config.MODEL_NAME))
+  if os.path.exists("logs/{}.pdopt".format(config.MODEL_NAME)):
+      param_dict = paddle.load("logs/{}.pdopt".format(config.MODEL_NAME))
+      optimizer.set_state_dict(param_dict)
+      print("加载已保存优化器权重","logs/{}.pdopt".format(config.MODEL_NAME))
+    
 
   # 开启模型训练模式
   model.train()
@@ -21,44 +33,44 @@ def train(model, dataloader, config, logger=None):
   i = 0
   for epoch in range(config.EPOCH_NUM):
       bar = tqdm(dataloader, total=len(dataloader))
-      for inputs, labels in bar:
+      for inputs,labels in bar:
           outputs = model(inputs)
-
+          outputs = paddle.transpose(outputs, perm=[2,1,0])
           loss = F.mse_loss(outputs,labels)
 
           loss.backward()
           optimizer.step()
           optimizer.clear_grad()
-          
-          bar.postfix = "{}/{}, Loss: {:.6f} Output:{:.0f},{:.0f}".format(epoch+1, config.EPOCH_NUM, loss.numpy()[0], labels.tolist()[0],outputs.tolist()[0][0])
+
+          bar.postfix = "{}/{}, Loss: {:.6f} Output:{:.0f},{:.0f}".format(epoch+1, config.EPOCH_NUM, loss.numpy()[0], labels.tolist()[0][0][-1],outputs.tolist()[0][0][-1])
           if logger and i%100==0:
               logger.add_scalar(tag = 'loss', step = i, value = loss.numpy()[0])
           i += 1
+      if (epoch+1) % config.SAVE_EPOCH == 0:
+          paddle.save(model.state_dict(), "logs/{}.pdparams".format(config.MODEL_NAME))
+          paddle.save(optimizer.state_dict(), "logs/{}.pdopt".format(config.MODEL_NAME))
+          print("保存训练权重","logs/{}".format(config.MODEL_NAME))
 
 if __name__ == "__main__":
+    import os
     config = EasyDict()
     # 训练配置
-    config.EPOCH_NUM = 10
-    config.BATCH_SIZE = 32
+    config.EPOCH_NUM = 500
+    config.BATCH_SIZE = 64
     config.SHUFFLE = True
     config.DROP_LAST = True
-    config.LEARNING_RATE = 1e-3
+    config.LEARNING_RATE = 1e-2
     config.DROPOUT_RATE = None
     # 模型配置
-    config.NUM_LAYERS = 8
-    config.INPUT_SIZE = 14
+    config.MODEL_NAME = "sale_regressor_100"
+    config.SAVE_EPOCH = 25
+    config.NUM_LAYERS = 15
     config.HIDDEN_SIZE = 32
 
     # 加载数据集
     dataloader = DataLoader(SaleDataset(10000),batch_size=config.BATCH_SIZE,shuffle=config.SHUFFLE,drop_last=config.DROP_LAST)
     # 加载模型
-    model = SaleModel(config.INPUT_SIZE, config.HIDDEN_SIZE, num_layers=config.NUM_LAYERS, dropout_rate=config.DROPOUT_RATE)
+    model = SaleModel(config.HIDDEN_SIZE, num_layers=config.NUM_LAYERS, dropout_rate=config.DROPOUT_RATE)
     # 训练
     train(model, dataloader, config)
-
-    # 保存模型，包含两部分：模型参数和优化器参数
-    model_name = "sale_regressor"
-    # 保存训练好的模型参数
-    paddle.save(model.state_dict(), "logs/{}.pdparams".format(model_name))
-    # # 保存优化器参数，方便后续模型继续训练
-    paddle.save(model.state_dict(), "logs/{}.pdopt".format(model_name))
+    
