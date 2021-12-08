@@ -1,6 +1,4 @@
-from math import perm
 import paddle
-from paddle.fluid.layers.nn import pad
 from paddle.nn import functional as F
 from paddle.io import DataLoader
 from easydict import EasyDict
@@ -31,18 +29,21 @@ def train(model, dataloader, config, logger=None):
   model.train()
   
   i = 0
+  focus_map = paddle.to_tensor([i for i in range(model.num_layers)])/model.num_layers
+  focus_map = paddle.expand(focus_map, shape=(config.BATCH_SIZE,config.NUM_LAYERS))
   for epoch in range(config.EPOCH_NUM):
       bar = tqdm(dataloader, total=len(dataloader))
       for inputs,labels in bar:
           outputs = model(inputs)
           outputs = paddle.transpose(outputs, perm=[2,1,0])
-          loss = F.mse_loss(outputs,labels)
-
+          outputs = paddle.reshape(outputs, shape=(-1,model.num_layers))
+          loss = F.mse_loss(outputs,labels,reduction='none')
+          loss = paddle.sum(loss*focus_map)/config.BATCH_SIZE
           loss.backward()
           optimizer.step()
           optimizer.clear_grad()
 
-          bar.postfix = "{}/{}, Loss: {:.6f} Output:{:.0f},{:.0f}".format(epoch+1, config.EPOCH_NUM, loss.numpy()[0], labels.tolist()[0][0][-1],outputs.tolist()[0][0][-1])
+          bar.postfix = "{}/{}, Loss: {:.6f} Output:{:.0f},{:.0f}".format(epoch+1, config.EPOCH_NUM, loss.numpy()[0], labels.tolist()[0][-1]*config.NORMALIZED,outputs.tolist()[0][-1]*config.NORMALIZED)
           if logger and i%100==0:
               logger.add_scalar(tag = 'loss', step = i, value = loss.numpy()[0])
           i += 1
@@ -55,20 +56,21 @@ if __name__ == "__main__":
     import os
     config = EasyDict()
     # 训练配置
-    config.EPOCH_NUM = 500
+    config.EPOCH_NUM = 200
     config.BATCH_SIZE = 64
     config.SHUFFLE = True
     config.DROP_LAST = True
     config.LEARNING_RATE = 1e-2
     config.DROPOUT_RATE = None
     # 模型配置
-    config.MODEL_NAME = "sale_regressor_100"
-    config.SAVE_EPOCH = 25
+    config.MODEL_NAME = "sale_regressor64_100"
+    config.SAVE_EPOCH = 100
     config.NUM_LAYERS = 15
     config.HIDDEN_SIZE = 32
+    config.NORMALIZED = 64
 
     # 加载数据集
-    dataloader = DataLoader(SaleDataset(10000),batch_size=config.BATCH_SIZE,shuffle=config.SHUFFLE,drop_last=config.DROP_LAST)
+    dataloader = DataLoader(SaleDataset(10000,config.NORMALIZED),batch_size=config.BATCH_SIZE,shuffle=config.SHUFFLE,drop_last=config.DROP_LAST)
     # 加载模型
     model = SaleModel(config.HIDDEN_SIZE, num_layers=config.NUM_LAYERS, dropout_rate=config.DROPOUT_RATE)
     # 训练

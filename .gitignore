@@ -5,6 +5,6 @@ __pycache__
 *.log
 *.
 *.tar.gz
-/logs
+*logs
 *.pdparams
 *.pdopt

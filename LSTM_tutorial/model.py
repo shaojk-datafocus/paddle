@@ -36,4 +36,6 @@ if __name__ == "__main__":
   model = SaleModel(8,num_layers=3)
   inputs = paddle.ones((6,1,14))
   outputs = model(inputs)
+  outputs = paddle.transpose(outputs, perm=[2,1,0])
+  outputs = paddle.reshape(outputs, shape=(-1,3))
   print(outputs.shape)
