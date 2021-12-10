@@ -44,7 +44,7 @@ def train(model, dataloader, config, logger=None):
           optimizer.clear_grad()
 
           bar.postfix = "{}/{}, Loss: {:.6f} Output:{:.0f},{:.0f}".format(epoch+1, config.EPOCH_NUM, loss.numpy()[0], labels.tolist()[0][-1]*config.NORMALIZED,outputs.tolist()[0][-1]*config.NORMALIZED)
-          if logger and i%100==0:
+          if logger and i%10==0:
               logger.add_scalar(tag = 'loss', step = i, value = loss.numpy()[0])
           i += 1
       if (epoch+1) % config.SAVE_EPOCH == 0:
@@ -54,16 +54,17 @@ def train(model, dataloader, config, logger=None):
 
 if __name__ == "__main__":
     import os
+    from visualdl import LogWriter
     config = EasyDict()
     # 训练配置
-    config.EPOCH_NUM = 200
-    config.BATCH_SIZE = 64
+    config.EPOCH_NUM = 100
+    config.BATCH_SIZE = 32
     config.SHUFFLE = True
     config.DROP_LAST = True
     config.LEARNING_RATE = 1e-2
     config.DROPOUT_RATE = None
     # 模型配置
-    config.MODEL_NAME = "sale_regressor64_100"
+    config.MODEL_NAME = "lstm_regressor32_100"
     config.SAVE_EPOCH = 100
     config.NUM_LAYERS = 15
     config.HIDDEN_SIZE = 32
@@ -73,6 +74,8 @@ if __name__ == "__main__":
     dataloader = DataLoader(SaleDataset(10000,config.NORMALIZED),batch_size=config.BATCH_SIZE,shuffle=config.SHUFFLE,drop_last=config.DROP_LAST)
     # 加载模型
     model = SaleModel(config.HIDDEN_SIZE, num_layers=config.NUM_LAYERS, dropout_rate=config.DROPOUT_RATE)
+    # 日志
+    logger = LogWriter(logdir="./logs/%s"%config.MODEL_NAME)
     # 训练
-    train(model, dataloader, config)
+    train(model, dataloader, config, logger)
     

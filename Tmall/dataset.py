@@ -1,6 +1,8 @@
+import math
 import re
 import random
 import numpy as np
+from numpy.lib.function_base import select
 from paddle.fluid.dataloader import dataset
 from paddle.io import Dataset
 from pymongo import MongoClient
@@ -15,12 +17,15 @@ def charCount(string,char):
   return count
 
 class TmallDataset(Dataset):
-  def __init__(self, len_seq, unknown_seq, host="localhost", port=27017):
+  def __init__(self, len_seq, unknown_seq, normalized=[1,1,1,1,1], host="localhost", port=27017):
     self.len_seq = len_seq # 指定数据集序列的长度
     self.unknown_seq = unknown_seq # 分割预测的序列下标
+    self.cnt_threshold = 2
+    self.normalized = np.array(normalized)
     self.client = MongoClient(host=host,port=port)
     self.data = [item for item in 
                   self.client.Tmall.sku.aggregate([
+                    {"$match": {"payItmCnt": {"$gte":self.cnt_threshold}}},
                     {"$group": {"_id":"$skuId"}},
                     {"$project": {"_id":0,"skuId": "$_id"}}])]
     self.num_sample = len(self.data)
@@ -29,16 +34,24 @@ class TmallDataset(Dataset):
       return self.num_sample
 
   def __getitem__(self, idx):
-    sku = self.data[idx]
-    sku = list(self.client.Tmall.sku.find(sku).sort("date",-1))
-    if len(sku)>self.len_seq:
-      sku = sku[:random.randint(self.len_seq,len(sku))]
+    sku = list(self.client.Tmall.sku.find(self.data[idx]).sort("date",-1)) # 按照日期降序排列
+    # if len(sku)>self.len_seq: # 随机取长度
+    #   sku = sku[-random.randint(self.len_seq,len(sku)):]
+    # 筛选匹配大于预期的值
+    select_idx = sku.index(random.choice(list(filter(lambda x: x['payItmCnt']>=self.cnt_threshold, sku))))
+    sku = sku[select_idx:select_idx+self.len_seq]
+
     sku_seq= self.parse_sku(sku)
     if len(sku_seq) > self.len_seq:
       sku_seq = sku_seq[-self.len_seq:]
-    seq = np.array(sku_seq[:-self.unknown_seq]).astype('float32')
-    label = np.array(sku_seq)[:,0].astype('float32')
-    return seq, label
+    sku_seq = (np.array(sku_seq)/self.normalized).astype('float32')
+    seq = sku_seq[:-self.unknown_seq]
+    label = sku_seq[:,0]
+    focus = np.array([self.focus(np.sum(np.bitwise_or(sku_seq[:,0]>0,sku_seq[:,3]>0))/self.len_seq)]).astype('float32')
+    return seq, label, focus
+
+  def focus(self, x):
+    return 1/(1 + math.exp(-(x-0.5)*10))
 
   def parse_sku(self, sku):
     start_date = sku[-1]['date']
@@ -58,7 +71,7 @@ class TmallDataset(Dataset):
       end_date-=timedelta(days=1)
     assert len(sku_seq) >= span_day
     while len(sku_seq) < self.len_seq: # 如果现有数据的天数范围不足以充满序列，就再前面填充-1值
-      sku_seq.append([-1,-1,amt,-1,size_feature])
+      sku_seq.append([0,0,amt,0,size_feature])
     sku_seq.reverse()
     return sku_seq
 
@@ -104,8 +117,13 @@ class TmallDataset(Dataset):
 
 if __name__ == "__main__":
   from paddle.io import DataLoader
-  dataset = TmallDataset(10,3)
-  # print(dataset[0])
-  dataloader = DataLoader(dataset,batch_size=4,shuffle=True,drop_last=True)
-  for seq,label in dataloader():
-    print(seq.shape, label.shape)
+  from tqdm import tqdm
+  dataset = TmallDataset(7,1)
+  with open("dataset.csv","w") as f:
+    for i,(seq,data,focus) in tqdm(enumerate(dataset)):
+      f.write(",".join([str(item) for item in data.tolist()]+[str(i)])+"\n")
+
+  # dataloader = DataLoader(dataset,batch_size=4,shuffle=True,drop_last=True)
+  # for seq,label,focus in dataloader():
+  #   print(seq.shape, label.shape,focus.shape)
+  # {"date": ISODate('2021-11-11'), "payItmCnt": {"$gte":3}}

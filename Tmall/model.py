@@ -1,5 +1,4 @@
 import paddle
-from paddle.fluid.layers.nn import pad
 from paddle.nn import Layer, LSTM, Dropout, Linear, Conv1D
 
 class TmallModel(Layer):
@@ -12,7 +11,7 @@ class TmallModel(Layer):
     self.conv = Conv1D(in_channels=input_size, out_channels=self.hidden_size, kernel_size=3, padding=1)
     self.lstm = LSTM(input_size=self.hidden_size, hidden_size=self.hidden_size, num_layers=num_layers)
     self.conv_ = Conv1D(in_channels=self.hidden_size, out_channels=1, kernel_size=3, padding=1)
-    
+
   def forward(self, x, **kwargs):
     batch_size = x.shape[0]
     # X.shape = batch_size, channel, length

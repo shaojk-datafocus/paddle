@@ -1,9 +1,9 @@
 import paddle
-from paddle.fluid.layers.nn import pad
 from paddle.io import DataLoader
 from model import TmallModel
 from dataset import TmallDataset
 from tqdm import tqdm
+import numpy as np
 
 def predict(model, dataloader, config, logger=None):
   # 检测是否可以使用GPU，如果可以优先使用GPU
@@ -17,21 +17,34 @@ def predict(model, dataloader, config, logger=None):
   # 开启模型预测模式
   model.eval()
   config.NORMALIZED = paddle.to_tensor(config.NORMALIZED).astype("float32")
-  i = 0
-  for epoch in range(config.EVAL_EPOCH_NUM):
-      bar = tqdm(dataloader, total=len(dataloader))
-      for inputs, labels, _ in bar:
-          outputs = model(paddle.transpose(inputs, perm=(0,2,1)))
-          inputs = paddle.round(inputs[0]*config.NORMALIZED)
-          labels = paddle.round(paddle.reshape(labels*config.NORMALIZED[0], shape=(-1,)))
-          outputs = paddle.round(paddle.reshape(outputs*config.NORMALIZED[0], shape=(-1,)))
-          if labels[-1] > 0:
-            print(inputs.tolist())
-            print(labels.tolist())
-            print(outputs.tolist())
-            i+=1
-          if i>5:
-            return 
+  score = [0] * config.UNKNOWN_SEQ
+  outputs_set = []
+  labels_set = []
+  num_total = 0
+  for inputs, labels, _ in tqdm(dataloader, postfix="评估中"):
+      outputs = model(paddle.transpose(inputs, perm=(0,2,1)))
+      outputs = paddle.transpose(outputs, perm=[2,1,0])
+      outputs = paddle.reshape(outputs, shape=(-1,model.num_layers))
+      outputs*=config.NORMALIZED[0]
+      labels*=config.NORMALIZED[0]
+      outputs_set+=paddle.round(outputs)[:,-config.UNKNOWN_SEQ:].tolist()
+      labels_set+=labels[:,-config.UNKNOWN_SEQ:].tolist()
+      bias = (paddle.abs(outputs-labels)<0.5).astype("int32")
+      bias = paddle.sum(bias, axis=0)
+      for i,bias in enumerate(bias.tolist()[-config.UNKNOWN_SEQ:]):
+        score[i] += bias
+      num_total += config.EVAL_BATCH_SIZE
+  print("完全准确率")
+  for s in score:
+    print("%.2f%%"%(s/num_total*100), end=' ')
+  outputs_set = np.array(outputs_set)
+  labels_set = np.array(labels_set)
+  avg_out = np.mean(outputs_set)
+  avg_label = np.mean(labels_set)
+  r2 = 1-np.sum(np.square(outputs_set-avg_out))/np.sum(np.square(labels_set-avg_label))
+  print("R2 Score")
+  print(r2)
+  # print(r2_score(outputs_set, labels_set))
 
 if __name__ == "__main__":
     from config import config

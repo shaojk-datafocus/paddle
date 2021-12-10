@@ -1,6 +1,8 @@
+# import random
 # import paddle
 # from paddle.nn import LSTM
 # import numpy as np
+# from datetime import datetime, timedelta
 
 # # model = LSTM(input_size=1,hidden_size=8,num_layers=4)
 
@@ -19,13 +21,15 @@
 # num_seq = np.linspace(i,i-14,15,dtype="float32")
 # print(num_seq)
 
-from datetime import datetime, timedelta
+# a = np.array([1,0,1,0,2,3,5])
+# b = a>=2
+# c = a==1
+# print(np.bitwise_or(b,c))
 
-date1 = datetime(2021, 10, 18, 0, 0)
-print(date1)
-date1+=timedelta(days=1)
-print(date1)
-l = [1,2,3]
-l.extend([9])
-l.reverse()
-print(l)
+a = [14,6,9,4,8,1,6]
+b = [14,6,9,4,89,1,6]
+
+# f = list(filter(lambda x: x>7, a))
+# print(a.index(random.choice(f)))
+
+print(a==b)
